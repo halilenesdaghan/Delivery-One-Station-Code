@@ -1,0 +1,474 @@
+# Delivery-One Example Data Flow
+
+## Initial Order
+
+### Customer Login And New Order
+
+1. Customer Login
+2. Customer Get Restaurants
+3. Customer Get Restaurant Menu
+4. Customer Make Order
+
+#### Customer Login
+
+~~~~
+Left For Future Work
+~~~~
+
+#### Customer Get Restaurant List
+
+From Customer Device to Server
+~~~~
+
+POST
+
+<server-ip>/getAvailableRestaurants
+
+{
+    "location" : "<google-maps-location>"
+}
+
+RESPONSE
+
+{
+    "restaurants" : [
+        {
+            "restaurantName" : "<restaurant-name>",
+            "minimumOrderPrice" : <min-price>,
+            "restaurantId" : <restaurantId>
+        }...
+    ]
+}
+
+~~~~
+
+#### Customer Get Specific Restaurant
+
+From Customer Device to Server
+
+~~~~
+
+GET
+
+<server-ip>/getRestaurantInfoForCustomer/{RestaurantID}
+
+RESPONSE
+
+{
+    "MenuItems" : [
+        {
+            "MenuItemId" : <MenuItemId>,
+            "MenuItemName" : <MenuItemName",
+            "MenuItemPrice" : <MenuItemPrice,
+            "MenuItemInfo" : "MenuItemInfo"
+        }...
+    ]
+}
+~~~~
+
+#### Customer Make Order
+
+From Customer Device to Server
+
+~~~~
+
+POST
+
+<server-ip>/newOrder
+{
+    "customerId" : <CustomerId>,
+    "items" : [
+        {
+            "ItemId" : <itemId>
+        }...
+    ],
+    "restaurantId" : <RestaurantId>
+}
+
+RESPONSE
+
+{
+    "Valid" : 1 if valid 0 if not ,
+    "OrderId" : <OrderId> if valid 0 if not
+}
+
+~~~~
+
+### Order Notifications
+
+1. Restaurant Notification
+2. Restaurant Validation
+3. Station of Customer Notification
+    * Station Notification if Order is Valid
+    * Customer Notification if Order is not Valid
+
+#### Restaurant Notification
+
+From Server to Restaurant via RabbitMQ
+
+~~~~
+
+{
+    "action" : "newOrder",
+    "orderId" : <orderId>
+}
+
+~~~~
+
+#### Restaurant Validation
+
+From Restaurant to Server
+
+~~~~
+
+GET
+
+<server-ip>/getOrderForRestaurant/orderId
+
+RESPONSE
+
+{
+    "orderPrice" : <orderPrice>,
+    "estimatedLoad" : <estimatedLoad>,
+    "menuItems" : [
+        {
+            "itemId" : <itemId>,
+            "itemName" : "<itemName>",
+            "itemPrice" : <itemPrice>,
+            "itemWeight" : <itemWeight>
+        }...
+    ]
+}
+
+POST
+
+<server-ip>/restaurantOrderValidation
+
+{
+    "orderId" : <orderId>,
+    "restaurantId" : <restaurantId>,
+    "validation" : 1 if valid 0 if not
+}
+
+RESPONSE
+
+{
+    "isOk" : 1 if ok 0 if not
+}
+~~~~
+
+#### Station Notification
+
+From Server to Station via RabbitMQ
+
+~~~~
+
+{
+    "droneId" : <droneID>,
+    "oderId" : <orderID>
+}
+
+~~~~
+
+From Station to Server via HTTP
+
+~~~~
+
+GET
+
+<server-ip>/getOrderInfoForStation/{orderID}
+
+RESPONSE
+
+{
+    "restaurantId" : <restaurantId>,
+    "restaurantLocation" : <google-maps-location>,
+    "orderWeight" : <orderWeight>,
+    "droneId" : <droneID>,
+    "qrStrToLoad" : "<qrstring>"
+}
+
+
+POST
+
+{
+    "FlighValidation" : 1 if ok 0 if not
+}
+
+RESPONSE
+
+{
+    "flightId" : <flightId> if validation ok 0 if not
+}
+
+~~~~
+
+(restaurant and customer needs to notified if flight is not validated)
+
+#### Customer Notification (Order Rejected By Restaurant)
+
+From Server to Customer via (mail ?)
+
+~~~~
+Left for future work since customer devices should know nothing about rabbitMQ
+~~~~
+
+
+### Flight Messages
+
+1. Station Flight Ready
+2. Drone Flight Info
+3. Drone ETA under x
+
+#### Station Flight Ready
+
+From Station to Server via http
+
+~~~~
+
+<server-ip>/droneFlightInit/{flightId}
+
+POST
+
+{
+    "droneFlightReady" : 1 if ok 0 if flight needs to be aborted
+}
+
+RESPONSE
+
+OK (notify customer and restaurant if flight aborted)
+
+~~~~
+
+#### Drone Flight Info
+
+Left For Future Work
+
+#### Drone ETA under x
+
+From Drone to Server
+
+~~~~
+
+<server-ip>/droneETA/{flightId}
+
+POST
+
+{
+    "eta" : <eta>
+}
+
+RESPONSE
+
+OK
+
+~~~~
+
+
+From Server to Target Station via RabbitMQ
+
+~~~~
+
+{
+    "droneId" : <droneId>,
+    "ETA" : <eta>
+}
+
+~~~~
+
+### Restaurant Order Load And Flight Initialization to Customer
+
+1. Drone Landing Status
+2. Drone Load Status
+3. Drone Flight Ready
+
+
+#### Drone Landing Status
+
+From Station To Server via HTTP
+
+~~~~
+
+<server-ip>/DroneLandingStatus/{FlightId}
+
+POST
+
+{
+    "drone-landed" : true/false
+}
+
+RESPONSE
+
+(if true)
+
+OK
+
+(if false) -> some bad shit happened i.e drone landing failed or stolen do smt
+
+~~~~
+
+#### Drone Load Status
+
+From Station to Server via http
+
+~~~~
+
+<server-ip>/droneLoaded/{droneId}
+
+POST
+
+{
+    "loadedWeight" : <loadedWeight>
+}
+
+RESPONSE
+
+OK if loaded weight ok
+
+~~~~
+
+
+From Server to Restaurant if loaded weigh not ok via RabbitMQ
+
+~~~~
+
+{
+    "expectedWeight" : <expectedWeight>,
+    "loadedWeight" : <loadedWeight>
+}
+
+~~~~
+
+#### Drone Flight Ready
+
+From Station to Server via http
+
+~~~~
+
+<server-ip>/droneFlightInit/{flightId}
+
+POST
+
+{
+    "droneFlihgtRead" : 1 if ok 2 if not and fligh needs to aborted
+}
+
+(if ok)
+
+RESPONSE
+
+{
+    "targetLocation" : <google-maps-string>
+}
+
+(if flight needs to aborted notify customer and restaurant)
+
+~~~~
+
+From Server to Station Near Customer via RabbitMQ
+
+~~~~
+
+{
+    "action" : "incomingDrone",
+    "droneId" : <droneId>,
+    "oderId" : <oderId>
+}
+
+~~~~
+
+### Delivery
+
+1. Drone Flight Info
+2. Drone ETA under x
+3. Customer Took Order
+4. Drone Flight Ready
+
+#### Drone Flight Info
+
+Left For Future Work
+
+#### Drone ETA under x
+
+From Drone to Server
+~~~~
+
+<server-ip>/droneETA/{flightId}
+
+POST
+
+{
+    "eta" : <eta>
+}
+
+RESPONSE
+
+OK
+
+~~~~
+
+From Server to Target Station via RabbitMQ
+
+~~~~
+
+{
+    "droneId" : <droneId>,
+    "ETA" : <eta>,
+    "qr" : <qrStr>
+}
+
+~~~~
+
+#### Customer Took Order
+
+From Station to Server
+
+~~~~
+
+<server-ip>/orderDelivered/{orderId}
+
+POST
+
+{
+    "orderDelivered" : 1
+}
+
+RESPONSE
+
+OK
+
+~~~~
+
+#### Drone Flight Ready
+
+From Station To Server
+
+~~~~
+
+GET
+
+<server-ip>/droneFlightReady/{droneId}
+
+RESPONSE
+
+{
+    "targetLocation" : <google-maps-location>
+}
+
+~~~~
+
+### Drone Come Back Home
+
+1. Drone Flight Info
+2. ETA Under x
+
+Same as above
+
+
+
+
+
+
+
+
+
